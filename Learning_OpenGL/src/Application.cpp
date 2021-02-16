@@ -19,6 +19,9 @@
 #include "imgui/imgui_impl_opengl3.h"
 #include "imgui/imgui_impl_glfw.h"
 
+#include "tests/TestClearColor.h"
+#include "tests/TestTexture2D.h"
+
 void processInput(GLFWwindow* window)
 {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -51,50 +54,8 @@ int main(void)
 	std::cout << glGetString(GL_VERSION) << '\n';
 
 	{
-		float positions[] = {
-		 -50.f, -50.f, 0.0f, 3.0f, 3.0f,			 // top right
-		 50.f,  -50.f, 0.0f, 3.0f, 0.0f,			 // bottom right
-		 50.f,   50.f, 0.0f, 0.0f, 0.0f,			 // bottom left
-		 -50.f,  50.f, 0.0f, 0.0f, 3.0f			 // top left 
-		};
-
-		// indicii care indica ce vertex-uri sa desenam
-		unsigned int indices[] = {  // note that we start from 0!
-		0, 1, 3,   // first triangle
-		1, 2, 3    // second triangle
-		};
-
 		GLCall(glEnable(GL_BLEND));	
 		GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
-
-		glm::mat4 proj = glm::ortho(0.0f, 960.0f, 0.0f, 540.0f, -1.0f, 1.0f);
-		glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0));
-
-		Shader shader("res/Basic.shader");
-		shader.Bind();
-
-		Texture texture("res/textures/texture.jpg");
-		texture.Bind();
-
-		shader.SetUniform1i("u_Texutre", 0);
-
-		VertexArray va;
-		VertexBuffer vb(positions, 5 * 4 * sizeof(float));
-		VertexBufferLayout layout;
-
-		layout.Push<float>(3);
-		layout.Push<float>(2);
-
-		va.AddBuffer(vb, layout);
-
-		IndexBuffer ib(indices, 6);
-
-		va.Unbind();
-		vb.Unbind();
-		ib.Unbind();
-		shader.Unbind();
-
-		Renderer renderer;
 
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
@@ -103,52 +64,40 @@ int main(void)
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init((char*)glGetString(GL_NUM_SHADING_LANGUAGE_VERSIONS));
 
-		glm::vec3 translationA(200, 200, 0);
-		glm::vec3 translationB(500, 200, 0);
+		test::Test* currentTest = nullptr;
+		test::TestMenu* testMenu = new test::TestMenu(currentTest);
+		currentTest = testMenu;
+
+		testMenu->RegisterTest<test::TestClearColor>("Clear Color");
+		testMenu->RegisterTest<test::TestTexture2D>("2D Texture Test");
+
+		test::TestClearColor test;
+
+		Renderer renderer;
 
 		/* Loop until the user closes the window */
 		while (!glfwWindowShouldClose(window))
 		{
+			GLCall(glClearColor(0.0f, 0.0f, 0.0f, 1.0f));
+			renderer.Clear();
+
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			processInput(window);
-
-			/* Render here */
-//			float red = (sin(glfwGetTime()) / 2.0f) + 0.5f;
-//			float green = (cos(glfwGetTime()) / 2.0f) + 0.5f;
-//			float blue = (red + green) / 2.0f;
-
-			// Desenarea triunghiurilor
-			renderer.Clear();
-//			shader.SetUniform4f("col", red, green, blue, 1.0f);
-
+			if (currentTest)
 			{
-				glm::mat4 model = glm::translate(glm::mat4(1.0f), translationA);
-				glm::mat4 mvp = proj * view * model;
-				shader.Bind();
-				shader.SetUniformMat4f("u_MVP", mvp);
-
-				renderer.Draw(va, ib, shader);
+				currentTest->OnUpdate(0.0f);
+				currentTest->OnRender();
+				ImGui::Begin("Test");
+				if (currentTest != testMenu && ImGui::Button("<-"))
+				{
+					delete currentTest;
+					currentTest = testMenu;
+				}
+				currentTest->OnImGuiRender();
+				ImGui::End();
 			}
-
-			{
-				glm::mat4 model = glm::translate(glm::mat4(1.0f), translationB);
-				glm::mat4 mvp = proj * view * model;
-				shader.SetUniformMat4f("u_MVP", mvp);
-
-				renderer.Draw(va, ib, shader);
-			}
-
-			va.Unbind();
-
-			{
-				ImGui::SliderFloat3("Translation A", &translationA.x, 0.0f, 960.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-				ImGui::SliderFloat3("Translation B", &translationB.x, 0.0f, 960.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-				ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-			}
-
 
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -159,6 +108,10 @@ int main(void)
 			/* Poll for and process events */
 			GLCall(glfwPollEvents());
 		}
+
+		delete currentTest;
+		if (currentTest != testMenu)
+			delete testMenu;
 	}
 
 	ImGui_ImplOpenGL3_Shutdown();
